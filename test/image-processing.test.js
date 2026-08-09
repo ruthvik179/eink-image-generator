@@ -56,6 +56,7 @@ test('exports the public image processing contract', () => {
   for (const name of ['PRESETS', 'getBrands', 'getPresetsForBrand', 'findPreset']) {
     assert.ok(name in ImageProcessing, `${name} export is missing`);
   }
+  assert.equal('findPresetBySearchName' in ImageProcessing, false);
 });
 
 test('preset IDs are unique and dimensions are positive integers', () => {
@@ -86,33 +87,6 @@ test('getPresetsForBrand filters every known brand and rejects unknown brands', 
   }
   assert.deepEqual(ImageProcessing.getPresetsForBrand('Unknown'), []);
   assert.deepEqual(ImageProcessing.getPresetsForBrand(''), []);
-});
-
-test('exact model-name lookup resolves required aliases case-insensitively', () => {
-  const expected = {
-    'Paperwhite Signature Edition': 'kindle-paperwhite-12th',
-    'Kindle Paperwhite Signature Edition': 'kindle-paperwhite-12th',
-    'Kobo Clara 2E': 'kobo-clara-family',
-    'Kobo Clara HD': 'kobo-clara-family',
-    'Kobo Clara BW': 'kobo-clara-family',
-    'Kobo Clara Colour': 'kobo-clara-family',
-    'Kobo Libra 2': 'kobo-libra-family',
-    'Kobo Libra H2O': 'kobo-libra-family',
-    'Kobo Libra Colour': 'kobo-libra-family',
-    'Kobo Elipsa 2E': 'kobo-elipsa-family',
-    'BOOX Palma 2': 'boox-palma-2',
-    'BOOX Note Air3': 'boox-note-air3',
-    'BOOX Note Air3 C': 'boox-note-air3-c',
-    'BOOX Tab Ultra C Pro': 'boox-tab-ultra-c-pro',
-    'BOOX Max': 'boox-max',
-    'BOOX Max Lumi 2': 'boox-max-lumi-family',
-    'BOOX Note Max': 'boox-note-max'
-  };
-
-  for (const [name, id] of Object.entries(expected)) {
-    assert.equal(ImageProcessing.findPresetBySearchName(`  ${name.toUpperCase()}  `)?.id, id, name);
-  }
-  assert.equal(ImageProcessing.findPresetBySearchName('not a real reader'), null);
 });
 
 test('split Kindle models have independent records and direct provenance', () => {
