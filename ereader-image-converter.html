@@ -1,0 +1,1498 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E-reader Image Converter</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f4efe3;
+      --panel: #fffdf7;
+      --ink: #202724;
+      --muted: #59645f;
+      --line: #a9aaa0;
+      --accent: #2f6f69;
+      --accent-dark: #1e504c;
+      --danger: #982f2f;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+
+    body > a {
+      position: fixed;
+      z-index: 20;
+      top: .5rem;
+      left: .5rem;
+      padding: .6rem .8rem;
+      background: var(--ink);
+      color: white;
+      transform: translateY(-180%);
+    }
+
+    body > a:focus { transform: none; }
+
+    header,
+    main,
+    aside {
+      width: min(1180px, calc(100% - 2rem));
+      margin-inline: auto;
+    }
+
+    header { padding: 1.5rem 0 1rem; }
+    header p { margin: 0; color: var(--muted); }
+    header > p:first-child {
+      color: var(--accent-dark);
+      font-size: .8rem;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    h1 { margin: .2rem 0; font-size: clamp(1.65rem, 4vw, 2.55rem); line-height: 1.1; }
+    h2 { margin: 0 0 .8rem; font-size: 1rem; }
+    p { margin: .45rem 0; }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(17rem, .78fr) minmax(24rem, 1.5fr);
+      gap: .8rem;
+      align-items: start;
+    }
+
+    section {
+      min-width: 0;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: .35rem;
+      background: var(--panel);
+      box-shadow: 0 2px 8px rgb(32 39 36 / 7%);
+    }
+
+    section:nth-of-type(3),
+    section:nth-of-type(5) { grid-column: 2; }
+    section:nth-of-type(3) { grid-row: 1 / span 2; }
+
+    label,
+    legend { font-size: .88rem; font-weight: 700; }
+    label { display: block; margin-bottom: .2rem; }
+    section > div:not(#crop-stage), fieldset > div { margin-bottom: .65rem; }
+
+    input,
+    select,
+    button {
+      max-width: 100%;
+      min-height: 2.35rem;
+      border: 1px solid #7c827e;
+      border-radius: .25rem;
+      background: white;
+      color: var(--ink);
+      font: inherit;
+    }
+    input:not([type="range"]):not([type="file"]), select { width: 100%; padding: .38rem .5rem; }
+    input[type="file"] { width: 100%; padding: .3rem; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    button { padding: .45rem .7rem; cursor: pointer; }
+    button:not(:disabled):hover { border-color: var(--accent); background: #edf6f3; }
+    :disabled { cursor: not-allowed; opacity: .55; }
+    :focus-visible {
+      outline: 3px solid #5a3600;
+      outline-offset: 3px;
+      box-shadow: 0 0 0 2px #fff;
+    }
+    [aria-invalid="true"] { border-color: var(--danger); outline-color: var(--danger); }
+
+    #source-drop-zone.is-dragging {
+      outline: 3px dashed var(--accent-dark);
+      outline-offset: -6px;
+      background: #edf6f3;
+    }
+
+    fieldset {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem;
+      margin: .5rem 0 .7rem;
+      padding: .6rem;
+      border: 1px solid var(--line);
+    }
+    fieldset > div { margin: 0; }
+
+    #target-dimensions { color: var(--accent-dark); font-weight: 750; }
+    #crop-help { color: var(--muted); font-size: .85rem; }
+    #crop-stage {
+      overflow: hidden;
+      min-height: 18rem;
+      border: 1px solid #515955;
+      border-radius: .2rem;
+      background-color: #ddd8ca;
+      background-image:
+        linear-gradient(45deg, #c8c4b9 25%, transparent 25%),
+        linear-gradient(-45deg, #c8c4b9 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #c8c4b9 75%),
+        linear-gradient(-45deg, transparent 75%, #c8c4b9 75%);
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      background-size: 16px 16px;
+    }
+    #crop-canvas {
+      display: block;
+      width: 100%;
+      height: clamp(19rem, 48vw, 34rem);
+      touch-action: none;
+    }
+    #crop-canvas:focus-visible {
+      outline-offset: -5px;
+      box-shadow: inset 0 0 0 2px #fff;
+    }
+    #reset-crop { margin-top: .7rem; }
+    #preview-canvas {
+      display: block;
+      width: min(100%, 900px);
+      height: auto;
+      max-width: 900px;
+      max-height: 900px;
+      margin: 0 auto .7rem;
+      border: 1px solid var(--line);
+      background: #eee9dd;
+    }
+    output { float: right; color: var(--accent-dark); font-variant-numeric: tabular-nums; }
+
+    aside {
+      min-height: 3.5rem;
+      padding: .8rem 0 1.5rem;
+    }
+    #status, #error, #quality-warning { padding: .6rem .75rem; border-left: .3rem solid var(--accent); background: #e9f2ef; }
+    #error { border-color: var(--danger); background: #f9e8e4; color: #751e1e; }
+    #quality-warning { border-color: #9b681f; background: #fff3d8; }
+    [hidden] { display: none !important; }
+
+    @media (max-width: 799px) {
+      main { grid-template-columns: 1fr; }
+      section:nth-of-type(3), section:nth-of-type(5) { grid-column: auto; grid-row: auto; }
+      #crop-canvas { height: clamp(18rem, 75vw, 28rem); }
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content">Skip to converter</a>
+  <header>
+    <p>E-reader Image Converter</p>
+    <h1>Prepare images for an e-reader screen</h1>
+    <p>Crop and tune an image locally. Nothing is uploaded.</p>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section id="source-drop-zone" aria-labelledby="source-heading">
+      <h2 id="source-heading">1. Choose an image</h2>
+      <label for="file-input">Image file</label>
+      <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
+      <p>JPEG, PNG, or WebP. Select a file or drop it anywhere in this panel.</p>
+    </section>
+
+    <section aria-labelledby="target-heading">
+      <h2 id="target-heading">2. Choose a screen</h2>
+      <div>
+        <label for="brand-select">Brand</label>
+        <select id="brand-select"></select>
+      </div>
+      <div>
+        <label for="device-search">Find a model</label>
+        <input id="device-search" type="search" list="device-options" autocomplete="off" placeholder="Type a model name">
+        <datalist id="device-options"></datalist>
+      </div>
+      <div>
+        <label for="device-select">Device</label>
+        <select id="device-select"></select>
+      </div>
+      <fieldset id="custom-dimensions">
+        <legend>Custom screen size</legend>
+        <div>
+          <label for="custom-width">Width (px)</label>
+          <input id="custom-width" type="number" min="1" max="10000" step="1" inputmode="numeric" disabled>
+        </div>
+        <div>
+          <label for="custom-height">Height (px)</label>
+          <input id="custom-height" type="number" min="1" max="10000" step="1" inputmode="numeric" disabled>
+        </div>
+      </fieldset>
+      <button id="rotate-dimensions" type="button">Rotate dimensions</button>
+      <p id="target-dimensions" aria-live="polite"></p>
+    </section>
+
+    <section aria-labelledby="crop-heading">
+      <h2 id="crop-heading">3. Crop</h2>
+      <p id="crop-help">Drag inside the crop to move it, or drag a square handle to resize it. With the canvas focused, use arrow keys to move, + or - to resize, and Shift for larger steps.</p>
+      <div id="crop-stage">
+        <canvas id="crop-canvas" width="720" height="480" tabindex="0" role="img" aria-label="Interactive source image crop" aria-describedby="crop-help" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown + -" aria-disabled="true"></canvas>
+      </div>
+      <button id="reset-crop" type="button" disabled>Reset crop</button>
+    </section>
+
+    <section aria-labelledby="settings-heading">
+      <h2 id="settings-heading">4. Tune</h2>
+      <div>
+        <label for="mode">Output mode</label>
+        <select id="mode" disabled>
+          <option value="color">Color</option>
+          <option value="grayscale">Grayscale</option>
+          <option value="dither">Black and white dither</option>
+        </select>
+      </div>
+      <div>
+        <label for="brightness">Brightness <output id="brightness-value" for="brightness">0</output></label>
+        <input id="brightness" type="range" min="-100" max="100" value="0" disabled>
+      </div>
+      <div>
+        <label for="contrast">Contrast <output id="contrast-value" for="contrast">0</output></label>
+        <input id="contrast" type="range" min="-100" max="100" value="0" disabled>
+      </div>
+      <div>
+        <label for="sharpness">Sharpness <output id="sharpness-value" for="sharpness">20</output></label>
+        <input id="sharpness" type="range" min="0" max="100" value="20" disabled>
+      </div>
+      <button id="reset-adjustments" type="button" disabled>Reset adjustments</button>
+    </section>
+
+    <section aria-labelledby="preview-heading">
+      <h2 id="preview-heading">5. Preview and save</h2>
+      <canvas id="preview-canvas" width="360" height="480" role="img" aria-label="Converted image preview"></canvas>
+      <p id="quality-warning" role="status" hidden></p>
+      <button id="download" type="button" disabled>Download PNG</button>
+    </section>
+  </main>
+
+  <aside aria-label="Converter messages">
+    <p id="status" role="status" aria-live="polite" aria-atomic="true">Choose an image to begin.</p>
+    <p id="error" role="alert" hidden></p>
+  </aside>
+
+  <script>
+/* IMAGE_PROCESSING_START */
+(function (root, factory) {
+  const api = factory();
+  root.ImageProcessing = api;
+  if (typeof module === 'object' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  // Sources: official manufacturer product/support pages; grouped URLs identify the named model families.
+  // BOOX dimensions use the full B/W pixel grid, normalized to portrait. Its live comparison data
+  // (https://shop.boox.com/cdn/shop/t/128/assets/boox-product.json) corroborates grouped legacy models.
+  const sources = {
+    'nook-glowlight-4e': 'https://help.barnesandnoble.com/hc/en-us/articles/5587789324059-NOOK-GlowLight-4-4e-Getting-Started',
+    'nook-glowlight-4': 'https://www.barnesandnobleinc.com/press-release/barnes-noble-introduces-nook-glowlight-4/',
+    'nook-glowlight-4-plus': 'https://help.barnesandnoble.com/hc/en-us/sections/4782610159899-B-N-NOOK-eReaders-glowlight-4-plus',
+    'kindle-basic-10th': 'https://www.amazon.com/Kindle-10th-Generation/dp/B07FZ8S74R',
+    'kindle-basic-11th': 'https://www.amazon.com/Kindle-11th-Generation/dp/B09SWW1X1S',
+    'kindle-paperwhite-10th': 'https://www.amazon.com/Kindle-Paperwhite-10th-Generation/dp/B07PS737QQ',
+    'kindle-paperwhite-11th': 'https://www.amazon.com/Kindle-Paperwhite-11th-Generation/dp/B08KTZ8249',
+    'kindle-paperwhite-12th': 'https://www.amazon.com/Kindle-Paperwhite-12th-Generation/dp/B0CFPJYX7P',
+    'kindle-colorsoft': 'https://www.amazon.com/All-New-Amazon-Kindle-Colorsoft-Signature-Edition/dp/B0CN3XR57P',
+    'kindle-oasis-9th': 'https://www.amazon.com/Kindle-Oasis-9th-Generation/dp/B06XD5YCKX',
+    'kindle-oasis-10th': 'https://www.amazon.com/Kindle-Oasis-10th-Generation/dp/B07L5GDTYY',
+    'kindle-scribe': 'https://www.amazon.com/Kindle-Scribe/dp/B09BS26B8B',
+    'kobo-nia': 'https://www.kobo.com/en-us/products/kobo-nia',
+    'kobo-clara-family': 'https://www.kobo.com/en-us/products/kobo-clara',
+    'kobo-libra-family': 'https://www.kobo.com/en-us/products/kobo-libra',
+    'kobo-sage': 'https://www.kobo.com/en-us/products/kobo-sage',
+    'kobo-elipsa-family': 'https://www.kobo.com/en-us/products/kobo-elipsa',
+    'boox-poke4-lite': 'https://shop.boox.com/products/poke4lite',
+    'boox-poke-go-6-family': 'https://shop.boox.com/products/poke5',
+    'boox-go-6': 'https://shop.boox.com/products/go6',
+    'boox-go-6-gen-2': 'https://shop.boox.com/products/go6gen2',
+    'boox-palma-family': 'https://shop.boox.com/products/palma',
+    'boox-palma-2': 'https://shop.boox.com/products/palma2',
+    'boox-palma-2-pro': 'https://shop.boox.com/products/palma2pro',
+    'boox-page-go-7-family': 'https://shop.boox.com/products/page',
+    'boox-go-7': 'https://shop.boox.com/products/go7',
+    'boox-go-color-7': 'https://shop.boox.com/products/gocolor7',
+    'boox-note-air-family': 'https://shop.boox.com/products/noteair2',
+    'boox-note-air3': 'https://shop.boox.com/products/noteair3',
+    'boox-note-air3-c': 'https://shop.boox.com/products/noteair3',
+    'boox-note-air4-c': 'https://shop.boox.com/products/noteair4c',
+    'boox-note-air5-c': 'https://shop.boox.com/products/noteair5c',
+    'boox-go-10-3': 'https://shop.boox.com/products/go103',
+    'boox-go-10-3-gen-2': 'https://shop.boox.com/products/go103gen2',
+    'boox-tab-ultra': 'https://shop.boox.com/products/tab',
+    'boox-tab-mini-c': 'https://shop.boox.com/products/tabminic',
+    'boox-tab-ultra-c': 'https://shop.boox.com/products/tabultrac',
+    'boox-tab-ultra-c-pro': 'https://shop.boox.com/products/tabultracpro',
+    'boox-tab-x-max-family': 'https://shop.boox.com/products/tabx',
+    'boox-tab-x-c': 'https://shop.boox.com/products/tabxc',
+    'boox-max': 'https://onyxboox.com/boox_max',
+    'boox-max-lumi-family': 'https://shop.boox.com/products/maxlumi2',
+    'boox-note-max': 'https://shop.boox.com/products/notemax'
+  };
+  const rows = [
+    ['nook-glowlight-4e', 'Barnes & Noble', 'GlowLight 4e', ['Nook GlowLight 4e'], 758, 1024],
+    ['nook-glowlight-4', 'Barnes & Noble', 'GlowLight 4', ['Nook GlowLight 4'], 1080, 1440],
+    ['nook-glowlight-4-plus', 'Barnes & Noble', 'GlowLight 4 Plus', ['Nook GlowLight 4 Plus'], 1404, 1872],
+    ['kindle-basic-10th', 'Kindle', 'Basic 10th', ['Kindle Basic 10th'], 600, 800],
+    ['kindle-basic-11th', 'Kindle', 'Basic 11th', ['Kindle Basic 11th'], 1072, 1448],
+    ['kindle-paperwhite-10th', 'Kindle', 'Paperwhite 10th', ['Kindle Paperwhite 10th'], 1072, 1448],
+    ['kindle-paperwhite-11th', 'Kindle', 'Paperwhite 11th', ['Kindle Paperwhite 11th', 'Kindle Paperwhite Signature Edition 11th'], 1236, 1648],
+    ['kindle-paperwhite-12th', 'Kindle', 'Paperwhite 12th', ['Kindle Paperwhite 12th', 'Paperwhite Signature Edition', 'Kindle Paperwhite Signature Edition', 'Kindle Paperwhite Signature Edition 12th'], 1264, 1680],
+    ['kindle-colorsoft', 'Kindle', 'Colorsoft', ['Kindle Colorsoft', 'Kindle Colorsoft Signature Edition'], 1264, 1680],
+    ['kindle-oasis-9th', 'Kindle', 'Oasis 9th', ['Kindle Oasis 9th'], 1264, 1680],
+    ['kindle-oasis-10th', 'Kindle', 'Oasis 10th', ['Kindle Oasis 10th'], 1264, 1680],
+    ['kindle-scribe', 'Kindle', 'Scribe', ['Kindle Scribe'], 1860, 2480],
+    ['kobo-nia', 'Kobo', 'Nia', ['Kobo Nia'], 758, 1024],
+    ['kobo-clara-family', 'Kobo', 'Clara family', ['Kobo Clara', 'Kobo Clara HD', 'Kobo Clara 2E', 'Kobo Clara BW', 'Kobo Clara Colour'], 1072, 1448],
+    ['kobo-libra-family', 'Kobo', 'Libra family', ['Kobo Libra', 'Kobo Libra H2O', 'Kobo Libra 2', 'Kobo Libra Colour'], 1264, 1680],
+    ['kobo-sage', 'Kobo', 'Sage', ['Kobo Sage'], 1440, 1920],
+    ['kobo-elipsa-family', 'Kobo', 'Elipsa family', ['Kobo Elipsa', 'Kobo Elipsa 2E'], 1404, 1872],
+    ['boox-poke4-lite', 'BOOX', 'Poke4 Lite', ['BOOX Poke4 Lite', 'BOOX Poke 4 Lite'], 758, 1024],
+    ['boox-poke-go-6-family', 'BOOX', 'Poke 3 / Poke 5', ['BOOX Poke', 'BOOX Poke3', 'BOOX Poke 3', 'BOOX Poke5', 'BOOX Poke 5'], 1072, 1448],
+    ['boox-go-6', 'BOOX', 'Go 6', ['BOOX Go6', 'BOOX Go 6'], 1072, 1448],
+    ['boox-go-6-gen-2', 'BOOX', 'Go 6 (Gen II)', ['BOOX Go 6 Gen II', 'BOOX Go 6 (Gen II)'], 1072, 1448],
+    ['boox-palma-family', 'BOOX', 'Palma', ['BOOX Palma'], 824, 1648],
+    ['boox-palma-2', 'BOOX', 'Palma 2', ['BOOX Palma 2'], 824, 1648],
+    ['boox-palma-2-pro', 'BOOX', 'Palma 2 Pro', ['BOOX Palma 2 Pro'], 824, 1648],
+    ['boox-page-go-7-family', 'BOOX', 'Page', ['BOOX Page'], 1264, 1680],
+    ['boox-go-7', 'BOOX', 'Go 7', ['BOOX Go 7'], 1264, 1680],
+    ['boox-go-color-7', 'BOOX', 'Go Color 7', ['BOOX Go Color 7', 'BOOX Go Color 7 Gen II'], 1264, 1680],
+    ['boox-note-air-family', 'BOOX', 'Note Air / Air2', ['BOOX Note Air', 'BOOX Note Air2', 'BOOX Note Air 2', 'BOOX Note Air2 Plus', 'BOOX Note Air 2 Plus'], 1404, 1872],
+    ['boox-note-air3', 'BOOX', 'Note Air3', ['BOOX Note Air3', 'BOOX Note Air 3'], 1404, 1872],
+    ['boox-note-air3-c', 'BOOX', 'Note Air3 C', ['BOOX Note Air3 C', 'BOOX Note Air 3 C'], 1860, 2480],
+    ['boox-note-air4-c', 'BOOX', 'Note Air4 C', ['BOOX Note Air4 C', 'BOOX Note Air 4 C'], 1860, 2480],
+    ['boox-note-air5-c', 'BOOX', 'Note Air5 C', ['BOOX Note Air5 C', 'BOOX Note Air 5 C'], 1860, 2480],
+    ['boox-go-10-3', 'BOOX', 'Go 10.3', ['BOOX Go 10.3'], 1860, 2480],
+    ['boox-go-10-3-gen-2', 'BOOX', 'Go 10.3 (Gen II)', ['BOOX Go 10.3 Gen II', 'BOOX Go 10.3 (Gen II)', 'BOOX Go 10.3 (Gen II) Lumi'], 1860, 2480],
+    ['boox-tab-ultra', 'BOOX', 'Tab Ultra', ['BOOX Tab Ultra'], 1404, 1872],
+    ['boox-tab-mini-c', 'BOOX', 'Tab Mini C', ['BOOX Tab Mini C'], 1404, 1872],
+    ['boox-tab-ultra-c', 'BOOX', 'Tab Ultra C', ['BOOX Tab Ultra C'], 1860, 2480],
+    ['boox-tab-ultra-c-pro', 'BOOX', 'Tab Ultra C Pro', ['BOOX Tab Ultra C Pro'], 1860, 2480],
+    ['boox-tab-x-max-family', 'BOOX', 'Tab X', ['BOOX Tab X'], 1650, 2200],
+    ['boox-tab-x-c', 'BOOX', 'Tab X C', ['BOOX Tab X C'], 2400, 3200],
+    ['boox-max', 'BOOX', 'Max', ['BOOX Max'], 1200, 1600],
+    ['boox-max-lumi-family', 'BOOX', 'Max Lumi family', ['BOOX Max Lumi', 'BOOX Max Lumi2', 'BOOX Max Lumi 2'], 1650, 2200],
+    ['boox-note-max', 'BOOX', 'Note Max', ['BOOX Note Max'], 2400, 3200]
+  ];
+  const PRESETS = Object.freeze(rows.map(([id, brand, label, searchNames, width, height]) => Object.freeze({ id, brand, label, searchNames: Object.freeze(searchNames), width, height, source: sources[id] })));
+  function getBrands() { return [...new Set(PRESETS.map((preset) => preset.brand))]; }
+  function getPresetsForBrand(brand) { return PRESETS.filter((preset) => preset.brand === brand); }
+  function findPreset(id) { return PRESETS.find((preset) => preset.id === id) || null; }
+  function findPresetBySearchName(name) {
+    const normalized = typeof name === 'string' ? name.trim().toLowerCase() : '';
+    return PRESETS.find((preset) => preset.searchNames.some((candidate) => candidate.toLowerCase() === normalized)) || null;
+  }
+
+  function parseDimension(value, name) {
+    const text = typeof value === 'number' && Number.isInteger(value) ? String(value) : (typeof value === 'string' ? value : '');
+    if (!/^\d+$/.test(text)) return { valid: false, message: `${name} must be a whole number between 1 and 10000` };
+    const number = Number(text);
+    if (number < 1 || number > 10000) return { valid: false, message: `${name} must be between 1 and 10000` };
+    return { valid: true, value: number };
+  }
+  function validateDimensions(width, height) {
+    const parsedWidth = parseDimension(width, 'width');
+    if (!parsedWidth.valid) return parsedWidth;
+    const parsedHeight = parseDimension(height, 'height');
+    if (!parsedHeight.valid) return parsedHeight;
+    return { valid: true, width: parsedWidth.value, height: parsedHeight.value };
+  }
+  function validateImageFile(file) {
+    if (!file || typeof file !== 'object' || typeof file.name !== 'string' || !file.name.trim() || !(Number(file.size) > 0)) return { valid: false, message: 'Select a non-empty image file' };
+    const type = typeof file.type === 'string' ? file.type.toLowerCase() : '';
+    const supported = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (type) return supported.has(type) ? { valid: true } : { valid: false, message: 'Unsupported image type' };
+    const extension = file.name.toLowerCase().match(/\.([a-z0-9]+)$/);
+    return extension && ['jpg', 'jpeg', 'png', 'webp'].includes(extension[1]) ? { valid: true } : { valid: false, message: 'Unsupported image type' };
+  }
+  function normalizeSegment(value, fallback, stripExtension = false) {
+    const source = stripExtension ? String(value || '').replace(/\.[^.]+$/, '') : String(value || '');
+    const normalized = source.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return normalized || fallback;
+  }
+  function buildFilename(sourceName, deviceName, width, height) {
+    return `${normalizeSegment(sourceName, 'image', true)}-${normalizeSegment(deviceName, 'device')}-${width}x${height}.png`;
+  }
+
+  function assertPixelDimensions(width, height, label) {
+    if (!Number.isInteger(width) || width < 1 || !Number.isInteger(height) || height < 1) throw new RangeError(`${label} dimensions must be positive integers`);
+  }
+  function estimateSourceNormalizationBytes(width, height, retainedWidth = 0, retainedHeight = 0) {
+    assertPixelDimensions(width, height, 'decoded source');
+    if ((retainedWidth === 0) !== (retainedHeight === 0)) throw new RangeError('retained source dimensions must both be zero or positive integers');
+    if (retainedWidth !== 0) assertPixelDimensions(retainedWidth, retainedHeight, 'retained source');
+    return (width * height * 2 + retainedWidth * retainedHeight) * 4;
+  }
+  function estimateRenderWorkingBytes(sourceWidth, sourceHeight, outputWidth, outputHeight) {
+    assertPixelDimensions(sourceWidth, sourceHeight, 'source');
+    assertPixelDimensions(outputWidth, outputHeight, 'output');
+    return sourceWidth * sourceHeight * 4 + outputWidth * outputHeight * 4 * 10;
+  }
+
+  const CROP_EPSILON = 1e-12;
+  const MIN_CROP_SIZE = 0.01;
+  function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(minimum, value)); }
+  function assertPositiveFinite(value, name) {
+    if (!(typeof value === 'number' && Number.isFinite(value) && value > 0)) throw new RangeError(`${name} must be a positive finite number`);
+  }
+  function assertFiniteNumber(value, name) {
+    if (!(typeof value === 'number' && Number.isFinite(value))) throw new RangeError(`${name} must be a finite number`);
+  }
+  function assertCrop(crop) {
+    if (!crop || typeof crop !== 'object') throw new RangeError('crop must be a normalized rectangle');
+    for (const name of ['x', 'y', 'width', 'height']) assertFiniteNumber(crop[name], `crop.${name}`);
+    if (crop.x < 0 || crop.y < 0 || crop.width <= 0 || crop.height <= 0 || crop.x + crop.width > 1 || crop.y + crop.height > 1) throw new RangeError('crop must be within normalized source bounds');
+  }
+  function cropAspect(sourceWidth, sourceHeight, targetWidth, targetHeight) {
+    return (targetWidth * sourceHeight) / (targetHeight * sourceWidth);
+  }
+  function constrainCrop(crop) {
+    const width = clamp(crop.width, CROP_EPSILON, 1);
+    const height = clamp(crop.height, CROP_EPSILON, 1);
+    return Object.freeze({
+      x: clamp(crop.x, 0, 1 - width),
+      y: clamp(crop.y, 0, 1 - height),
+      width,
+      height
+    });
+  }
+  function resetCrop(sourceWidth, sourceHeight, targetWidth, targetHeight) {
+    assertPositiveFinite(sourceWidth, 'sourceWidth');
+    assertPositiveFinite(sourceHeight, 'sourceHeight');
+    assertPositiveFinite(targetWidth, 'targetWidth');
+    assertPositiveFinite(targetHeight, 'targetHeight');
+    const aspect = cropAspect(sourceWidth, sourceHeight, targetWidth, targetHeight);
+    const width = Math.min(1, aspect);
+    const height = Math.min(1, 1 / aspect);
+    return constrainCrop({ x: (1 - width) / 2, y: (1 - height) / 2, width, height });
+  }
+  function moveCrop(crop, dx, dy) {
+    assertCrop(crop);
+    assertFiniteNumber(dx, 'dx');
+    assertFiniteNumber(dy, 'dy');
+    return constrainCrop({ x: crop.x + dx, y: crop.y + dy, width: crop.width, height: crop.height });
+  }
+  function resizeCrop(crop, handle, dx, dy, aspect) {
+    assertCrop(crop);
+    assertFiniteNumber(dx, 'dx');
+    assertFiniteNumber(dy, 'dy');
+    assertPositiveFinite(aspect, 'aspect');
+    if (!['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].includes(handle)) throw new RangeError('handle must be a crop resize handle');
+    const left = crop.x;
+    const right = crop.x + crop.width;
+    const top = crop.y;
+    const bottom = crop.y + crop.height;
+    const centerX = (left + right) / 2;
+    const centerY = (top + bottom) / 2;
+    const minimumWidth = Math.max(MIN_CROP_SIZE, MIN_CROP_SIZE * aspect);
+    let desiredWidth;
+    let maximumWidth;
+    let x;
+    let y;
+
+    if (handle === 'n' || handle === 's') {
+      const desiredHeight = handle === 'n' ? crop.height - dy : crop.height + dy;
+      desiredWidth = desiredHeight * aspect;
+      maximumWidth = Math.min(2 * centerX, 2 * (1 - centerX), aspect * (handle === 'n' ? bottom : 1 - top));
+      const width = clamp(desiredWidth, Math.min(minimumWidth, maximumWidth), maximumWidth);
+      const height = width / aspect;
+      x = centerX - width / 2;
+      y = handle === 'n' ? bottom - height : top;
+      return constrainCrop({ x, y, width, height });
+    }
+
+    if (handle === 'e' || handle === 'w') {
+      desiredWidth = handle === 'e' ? crop.width + dx : crop.width - dx;
+      maximumWidth = Math.min(handle === 'e' ? 1 - left : right, 2 * aspect * centerY, 2 * aspect * (1 - centerY));
+      const width = clamp(desiredWidth, Math.min(minimumWidth, maximumWidth), maximumWidth);
+      const height = width / aspect;
+      x = handle === 'e' ? left : right - width;
+      y = centerY - height / 2;
+      return constrainCrop({ x, y, width, height });
+    }
+
+    const horizontalChange = (handle === 'ne' || handle === 'se') ? dx : -dx;
+    const verticalChange = (handle === 'nw' || handle === 'ne') ? -dy : dy;
+    const widthFromHorizontal = crop.width + horizontalChange;
+    const widthFromVertical = (crop.height + verticalChange) * aspect;
+    desiredWidth = Math.abs(horizontalChange) >= Math.abs(verticalChange * aspect) ? widthFromHorizontal : widthFromVertical;
+    const anchorLeft = handle === 'ne' || handle === 'se';
+    const anchorTop = handle === 'se' || handle === 'sw';
+    maximumWidth = Math.min(
+      anchorLeft ? 1 - left : right,
+      aspect * (anchorTop ? 1 - top : bottom)
+    );
+    const width = clamp(desiredWidth, Math.min(minimumWidth, maximumWidth), maximumWidth);
+    const height = width / aspect;
+    x = anchorLeft ? left : right - width;
+    y = anchorTop ? top : bottom - height;
+    return constrainCrop({ x, y, width, height });
+  }
+  function changeCropAspect(crop, aspect) {
+    assertCrop(crop);
+    assertPositiveFinite(aspect, 'aspect');
+    const centerX = crop.x + crop.width / 2;
+    const centerY = crop.y + crop.height / 2;
+    const width = Math.min(1, aspect);
+    const height = width / aspect;
+    return constrainCrop({ x: centerX - width / 2, y: centerY - height / 2, width, height });
+  }
+  function cropToSource(crop, sourceWidth, sourceHeight) {
+    assertCrop(crop);
+    assertPositiveFinite(sourceWidth, 'sourceWidth');
+    assertPositiveFinite(sourceHeight, 'sourceHeight');
+    const bounded = constrainCrop(crop);
+    const sx = Math.floor(bounded.x * sourceWidth);
+    const sy = Math.floor(bounded.y * sourceHeight);
+    const right = Math.ceil((bounded.x + bounded.width) * sourceWidth);
+    const bottom = Math.ceil((bounded.y + bounded.height) * sourceHeight);
+    return { sx, sy, sw: right - sx, sh: bottom - sy };
+  }
+
+  function roundChannel(value) { return Math.round(clamp(value, 0, 255)); }
+  function controlValue(value, minimum, maximum) {
+    return typeof value === 'number' && Number.isFinite(value) ? clamp(value, minimum, maximum) : 0;
+  }
+  function assertRgbaDimensions(rgba, width, height) {
+    if (!Number.isInteger(width) || width < 1) throw new RangeError('width must be a positive integer');
+    if (!Number.isInteger(height) || height < 1) throw new RangeError('height must be a positive integer');
+    if (!rgba || rgba.length !== width * height * 4) throw new RangeError('rgba length must match width and height');
+  }
+  function flattenTransparency(rgba, matte = [255, 255, 255]) {
+    const output = new Uint8ClampedArray(rgba.length);
+    for (let index = 0; index < rgba.length; index += 4) {
+      const alpha = rgba[index + 3] / 255;
+      output[index] = roundChannel(rgba[index] * alpha + matte[0] * (1 - alpha));
+      output[index + 1] = roundChannel(rgba[index + 1] * alpha + matte[1] * (1 - alpha));
+      output[index + 2] = roundChannel(rgba[index + 2] * alpha + matte[2] * (1 - alpha));
+      output[index + 3] = 255;
+    }
+    return output;
+  }
+  function toPerceptualGrayscale(rgba) {
+    const output = new Uint8ClampedArray(rgba.length);
+    for (let index = 0; index < rgba.length; index += 4) {
+      const luminance = roundChannel(0.2126 * rgba[index] + 0.7152 * rgba[index + 1] + 0.0722 * rgba[index + 2]);
+      output[index] = luminance;
+      output[index + 1] = luminance;
+      output[index + 2] = luminance;
+      output[index + 3] = 255;
+    }
+    return output;
+  }
+  function adjustBrightnessContrast(rgba, brightness, contrast) {
+    const output = new Uint8ClampedArray(rgba.length);
+    const brightnessOffset = controlValue(brightness, -100, 100) * 255 / 100;
+    const mappedContrast = controlValue(contrast, -100, 100) * 255 / 100;
+    const factor = (259 * (mappedContrast + 255)) / (255 * (259 - mappedContrast));
+    for (let index = 0; index < rgba.length; index += 4) {
+      output[index] = roundChannel(factor * (rgba[index] - 128) + 128 + brightnessOffset);
+      output[index + 1] = roundChannel(factor * (rgba[index + 1] - 128) + 128 + brightnessOffset);
+      output[index + 2] = roundChannel(factor * (rgba[index + 2] - 128) + 128 + brightnessOffset);
+      output[index + 3] = 255;
+    }
+    return output;
+  }
+  function unsharpMask(rgba, width, height, amount) {
+    assertRgbaDimensions(rgba, width, height);
+    const output = new Uint8ClampedArray(rgba.length);
+    const strength = controlValue(amount, 0, 100) / 100;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = (y * width + x) * 4;
+        for (let channel = 0; channel < 3; channel += 1) {
+          let total = 0;
+          for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+            for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+              const sampleX = clamp(x + offsetX, 0, width - 1);
+              const sampleY = clamp(y + offsetY, 0, height - 1);
+              total += rgba[(sampleY * width + sampleX) * 4 + channel];
+            }
+          }
+          const blur = total / 9;
+          output[index + channel] = roundChannel(rgba[index + channel] + (rgba[index + channel] - blur) * strength);
+        }
+        output[index + 3] = 255;
+      }
+    }
+    return output;
+  }
+  function floydSteinbergDither(rgba, width, height) {
+    assertRgbaDimensions(rgba, width, height);
+    const grayscale = new Float64Array(width * height);
+    const output = new Uint8ClampedArray(rgba.length);
+    for (let index = 0; index < grayscale.length; index += 1) {
+      const rgbaIndex = index * 4;
+      grayscale[index] = 0.2126 * rgba[rgbaIndex] + 0.7152 * rgba[rgbaIndex + 1] + 0.0722 * rgba[rgbaIndex + 2];
+    }
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = y * width + x;
+        const value = grayscale[index];
+        const binary = value < 128 ? 0 : 255;
+        const error = value - binary;
+        const rgbaIndex = index * 4;
+        output[rgbaIndex] = binary;
+        output[rgbaIndex + 1] = binary;
+        output[rgbaIndex + 2] = binary;
+        output[rgbaIndex + 3] = 255;
+        if (x + 1 < width) grayscale[index + 1] += error * 7 / 16;
+        if (y + 1 < height) {
+          if (x > 0) grayscale[index + width - 1] += error * 3 / 16;
+          grayscale[index + width] += error * 5 / 16;
+          if (x + 1 < width) grayscale[index + width + 1] += error / 16;
+        }
+      }
+    }
+    return output;
+  }
+  function processPixels(rgba, width, height, settings) {
+    assertRgbaDimensions(rgba, width, height);
+    if (!settings || typeof settings !== 'object' || !['color', 'grayscale', 'dither'].includes(settings.mode)) throw new RangeError('settings.mode must be color, grayscale, or dither');
+    const options = settings;
+    const flattened = flattenTransparency(rgba);
+    const adjusted = adjustBrightnessContrast(flattened, options.brightness, options.contrast);
+    const sharpened = unsharpMask(adjusted, width, height, options.sharpness);
+    if (options.mode === 'color') return sharpened;
+    if (options.mode === 'grayscale') return toPerceptualGrayscale(sharpened);
+    return floydSteinbergDither(sharpened, width, height);
+  }
+
+  return Object.freeze({ PRESETS, getBrands, getPresetsForBrand, findPreset, findPresetBySearchName, validateDimensions, validateImageFile, buildFilename, estimateSourceNormalizationBytes, estimateRenderWorkingBytes, resetCrop, moveCrop, resizeCrop, changeCropAspect, cropToSource, flattenTransparency, toPerceptualGrayscale, adjustBrightnessContrast, unsharpMask, floydSteinbergDither, processPixels });
+});
+/* IMAGE_PROCESSING_END */
+  </script>
+  <script>
+  (() => {
+    'use strict';
+
+    const $ = (id) => document.getElementById(id);
+    const controls = {
+      file: $('file-input'),
+      sourceDropZone: $('source-drop-zone'),
+      brand: $('brand-select'),
+      device: $('device-select'),
+      deviceSearch: $('device-search'),
+      deviceOptions: $('device-options'),
+      customWidth: $('custom-width'),
+      customHeight: $('custom-height'),
+      rotate: $('rotate-dimensions'),
+      dimensions: $('target-dimensions'),
+      cropCanvas: $('crop-canvas'),
+      resetCrop: $('reset-crop'),
+      mode: $('mode'),
+      brightness: $('brightness'),
+      contrast: $('contrast'),
+      sharpness: $('sharpness'),
+      resetAdjustments: $('reset-adjustments'),
+      previewCanvas: $('preview-canvas'),
+      download: $('download'),
+      status: $('status'),
+      error: $('error'),
+      warning: $('quality-warning')
+    };
+
+    const state = {
+      source: { canvas: null, width: 0, height: 0, name: '' },
+      target: { presetId: '', deviceName: '', width: 0, height: 0, valid: false, rotated: false },
+      crop: { rect: null, displayRect: null, interaction: null, announcementTimer: null },
+      settings: { mode: 'color', brightness: 0, contrast: 0, sharpness: 20 }
+    };
+
+    const CUSTOM = '__custom__';
+    const HANDLE_SIZE = 12;
+    const HANDLE_HIT_SIZE = 18;
+    const PREVIEW_DEBOUNCE_MS = 120;
+    const MAX_PREVIEW_SIDE = 900;
+    const MAX_WORKING_BYTES = 512 * 1024 * 1024;
+    let activeDecodeId = 0;
+    let activeRenderToken = 0;
+    let previewTimer = 0;
+    let exporting = false;
+
+    function setStatus(message) {
+      controls.status.textContent = message;
+    }
+
+    function showError(message) {
+      controls.error.textContent = message;
+      controls.error.hidden = false;
+    }
+
+    function clearError() {
+      controls.error.textContent = '';
+      controls.error.hidden = true;
+    }
+
+    function option(value, text) {
+      const element = document.createElement('option');
+      element.value = value;
+      element.textContent = text;
+      return element;
+    }
+
+    function populateModels() {
+      for (const brand of ImageProcessing.getBrands()) {
+        controls.brand.append(option(brand, brand));
+      }
+      controls.brand.append(option(CUSTOM, 'Custom'));
+
+      for (const preset of ImageProcessing.PRESETS) {
+        for (const name of preset.searchNames) {
+          const entry = option(name, `${name} — ${preset.width} × ${preset.height}`);
+          controls.deviceOptions.append(entry);
+        }
+      }
+    }
+
+    function populateDevices(brand, selectedId) {
+      controls.device.replaceChildren();
+      if (brand !== CUSTOM) {
+        const group = document.createElement('optgroup');
+        group.label = brand;
+        for (const preset of ImageProcessing.getPresetsForBrand(brand)) {
+          group.append(option(preset.id, preset.label));
+        }
+        controls.device.append(group);
+      }
+      const customGroup = document.createElement('optgroup');
+      customGroup.label = 'Other';
+      customGroup.append(option(CUSTOM, 'Custom dimensions'));
+      controls.device.append(customGroup);
+      controls.device.value = selectedId || (brand === CUSTOM ? CUSTOM : controls.device.options[0].value);
+    }
+
+    function cropAspect() {
+      return (state.target.width * state.source.height) / (state.target.height * state.source.width);
+    }
+
+    function updateDimensionText() {
+      if (!state.target.valid) {
+        controls.dimensions.textContent = 'Enter a width and height from 1 to 10000 pixels.';
+        return;
+      }
+      const orientation = state.target.width === state.target.height
+        ? 'square'
+        : (state.target.width > state.target.height ? 'landscape' : 'portrait');
+      controls.dimensions.textContent = `${state.target.width} × ${state.target.height} pixels (${orientation})`;
+    }
+
+    function updateCropAvailability() {
+      const available = Boolean(state.source.canvas && state.target.valid);
+      controls.resetCrop.disabled = !available;
+      controls.download.disabled = !available || exporting;
+      controls.cropCanvas.setAttribute('aria-disabled', String(!available));
+      if (!available) controls.cropCanvas.style.cursor = 'default';
+    }
+
+    function applyTargetAspect() {
+      updateDimensionText();
+      updateCropAvailability();
+      if (!state.target.valid || !state.source.canvas) {
+        return;
+      }
+      state.crop.rect = state.crop.rect
+        ? ImageProcessing.changeCropAspect(state.crop.rect, cropAspect())
+        : ImageProcessing.resetCrop(state.source.width, state.source.height, state.target.width, state.target.height);
+      renderCrop();
+      schedulePreview();
+    }
+
+    function selectPreset(id) {
+      const preset = ImageProcessing.findPreset(id);
+      if (!preset) return;
+      state.target.presetId = preset.id;
+      state.target.deviceName = preset.searchNames[0];
+      state.target.width = preset.width;
+      state.target.height = preset.height;
+      state.target.valid = true;
+      state.target.rotated = false;
+      controls.brand.value = preset.brand;
+      populateDevices(preset.brand, preset.id);
+      controls.deviceSearch.value = preset.searchNames[0];
+      controls.customWidth.value = String(preset.width);
+      controls.customHeight.value = String(preset.height);
+      controls.customWidth.disabled = true;
+      controls.customHeight.disabled = true;
+      controls.customWidth.removeAttribute('aria-invalid');
+      controls.customHeight.removeAttribute('aria-invalid');
+      clearError();
+      applyTargetAspect();
+    }
+
+    function enterCustomMode() {
+      controls.brand.value = CUSTOM;
+      populateDevices(CUSTOM, CUSTOM);
+      controls.deviceSearch.value = '';
+      controls.customWidth.disabled = false;
+      controls.customHeight.disabled = false;
+      state.target.presetId = CUSTOM;
+      state.target.deviceName = 'Custom';
+      state.target.rotated = false;
+      validateCustomDimensions();
+      controls.customWidth.focus();
+    }
+
+    function validateCustomDimensions() {
+      const widthResult = ImageProcessing.validateDimensions(controls.customWidth.value, '1');
+      const heightResult = ImageProcessing.validateDimensions('1', controls.customHeight.value);
+      const result = ImageProcessing.validateDimensions(controls.customWidth.value, controls.customHeight.value);
+      state.target.valid = result.valid;
+      controls.customWidth.setAttribute('aria-invalid', String(!widthResult.valid));
+      controls.customHeight.setAttribute('aria-invalid', String(!heightResult.valid));
+      if (!result.valid) {
+        showError(result.message);
+        updateDimensionText();
+        updateCropAvailability();
+        schedulePreview();
+        return false;
+      }
+      clearError();
+      state.target.width = result.width;
+      state.target.height = result.height;
+      state.target.deviceName = 'Custom';
+      applyTargetAspect();
+      return true;
+    }
+
+    function bindTargetControls() {
+      controls.brand.addEventListener('change', () => {
+        if (controls.brand.value === CUSTOM) {
+          enterCustomMode();
+          return;
+        }
+        populateDevices(controls.brand.value);
+        selectPreset(controls.device.value);
+      });
+
+      controls.device.addEventListener('change', () => {
+        if (controls.device.value === CUSTOM) enterCustomMode();
+        else selectPreset(controls.device.value);
+      });
+
+      controls.deviceSearch.addEventListener('input', () => {
+        const preset = ImageProcessing.findPresetBySearchName(controls.deviceSearch.value);
+        if (preset) selectPreset(preset.id);
+      });
+
+      controls.customWidth.addEventListener('input', validateCustomDimensions);
+      controls.customHeight.addEventListener('input', validateCustomDimensions);
+
+      controls.rotate.addEventListener('click', () => {
+        if (!state.target.valid) {
+          showError('Enter valid custom dimensions before rotating.');
+          return;
+        }
+        const width = state.target.width;
+        state.target.width = state.target.height;
+        state.target.height = width;
+        state.target.rotated = !state.target.rotated;
+        if (state.target.presetId === CUSTOM) {
+          controls.customWidth.value = String(state.target.width);
+          controls.customHeight.value = String(state.target.height);
+        }
+        applyTargetAspect();
+      });
+    }
+
+    async function loadImageElement(url) {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = url;
+      if (typeof image.decode === 'function') await image.decode();
+      else await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error('The browser could not decode this image.'));
+      });
+      return image;
+    }
+
+    function assertSourceMemory(width, height) {
+      const bytes = ImageProcessing.estimateSourceNormalizationBytes(
+        width,
+        height,
+        state.source.width,
+        state.source.height
+      );
+      if (bytes > MAX_WORKING_BYTES) {
+        throw new RangeError(`This decoded image needs about ${formatMebibytes(bytes)} MiB for its bitmap, normalized canvas, and the image already open. That exceeds the 512 MiB safety limit. Choose a smaller image; the previous valid image will be kept.`);
+      }
+    }
+
+    async function decodeToCanvas(file) {
+      let drawable = null;
+      let objectUrl = '';
+      try {
+        if (typeof createImageBitmap === 'function') {
+          try {
+            drawable = await createImageBitmap(file, { imageOrientation: 'from-image' });
+          } catch (_bitmapError) {
+            drawable = null;
+          }
+        }
+        if (!drawable) {
+          objectUrl = URL.createObjectURL(file);
+          drawable = await loadImageElement(objectUrl);
+        }
+        const width = drawable.width || drawable.naturalWidth;
+        const height = drawable.height || drawable.naturalHeight;
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+          throw new Error('The decoded image has invalid dimensions.');
+        }
+        assertSourceMemory(width, height);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) throw new Error('The browser could not allocate an image canvas.');
+        context.drawImage(drawable, 0, 0, width, height);
+        return { canvas, width, height };
+      } finally {
+        if (drawable && typeof drawable.close === 'function') drawable.close();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    function setProcessingEnabled(enabled) {
+      controls.mode.disabled = !enabled;
+      controls.brightness.disabled = !enabled;
+      controls.contrast.disabled = !enabled;
+      controls.sharpness.disabled = !enabled;
+      controls.resetAdjustments.disabled = !enabled;
+      updateCropAvailability();
+    }
+
+    async function handleFile(file) {
+      const decodeId = ++activeDecodeId;
+      const validation = ImageProcessing.validateImageFile(file);
+      if (!validation.valid) {
+        showError(validation.message);
+        setStatus(state.source.canvas ? `Keeping ${state.source.name}.` : 'Choose a supported image to begin.');
+        return;
+      }
+      clearError();
+      setStatus(`Opening ${file.name}…`);
+      try {
+        const decoded = await decodeToCanvas(file);
+        if (decodeId !== activeDecodeId) return;
+        Object.assign(state.source, {
+          canvas: decoded.canvas,
+          width: decoded.width,
+          height: decoded.height,
+          name: file.name
+        });
+        state.crop.rect = ImageProcessing.resetCrop(decoded.width, decoded.height, state.target.width, state.target.height);
+        state.crop.interaction = null;
+        setProcessingEnabled(true);
+        resizeCropCanvas();
+        setStatus(`${file.name} loaded at ${decoded.width} × ${decoded.height} pixels.`);
+        schedulePreview();
+      } catch (error) {
+        if (decodeId !== activeDecodeId) return;
+        showError(error instanceof Error ? error.message : 'The image could not be decoded.');
+        setStatus(state.source.canvas ? `Keeping ${state.source.name}.` : 'Choose another image to continue.');
+      }
+    }
+
+    function canvasPoint(event) {
+      const bounds = controls.cropCanvas.getBoundingClientRect();
+      return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    }
+
+    function normalizedPoint(point) {
+      const display = state.crop.displayRect;
+      return {
+        x: (point.x - display.x) / display.width,
+        y: (point.y - display.y) / display.height
+      };
+    }
+
+    function cropDisplayRect() {
+      const display = state.crop.displayRect;
+      const crop = state.crop.rect;
+      return {
+        x: display.x + crop.x * display.width,
+        y: display.y + crop.y * display.height,
+        width: crop.width * display.width,
+        height: crop.height * display.height
+      };
+    }
+
+    function handlePoints(rect) {
+      const centerX = rect.x + rect.width / 2;
+      const centerY = rect.y + rect.height / 2;
+      const right = rect.x + rect.width;
+      const bottom = rect.y + rect.height;
+      return {
+        nw: [rect.x, rect.y], n: [centerX, rect.y], ne: [right, rect.y],
+        e: [right, centerY], se: [right, bottom], s: [centerX, bottom],
+        sw: [rect.x, bottom], w: [rect.x, centerY]
+      };
+    }
+
+    function hitTest(point) {
+      const rect = cropDisplayRect();
+      for (const [handle, [x, y]] of Object.entries(handlePoints(rect))) {
+        if (Math.abs(point.x - x) <= HANDLE_HIT_SIZE / 2 && Math.abs(point.y - y) <= HANDLE_HIT_SIZE / 2) {
+          return { kind: 'resize', handle };
+        }
+      }
+      if (point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height) {
+        return { kind: 'move', handle: '' };
+      }
+      return null;
+    }
+
+    function cropPercent(value) {
+      return (value * 100).toFixed(2).replace(/\.?0+$/, '');
+    }
+
+    function cropSummary(crop) {
+      return `x ${cropPercent(crop.x)}%, y ${cropPercent(crop.y)}%, width ${cropPercent(crop.width)}%, height ${cropPercent(crop.height)}%`;
+    }
+
+    function updateCropAria() {
+      controls.cropCanvas.setAttribute('aria-label', state.crop.rect
+        ? `Interactive source image crop. ${cropSummary(state.crop.rect).replace('x ', 'x position ').replace(', y ', ', y position ')}.`
+        : 'Interactive source image crop. Choose an image to begin.');
+    }
+
+    function announceCrop() {
+      clearTimeout(state.crop.announcementTimer);
+      state.crop.announcementTimer = setTimeout(() => {
+        const crop = state.crop.rect;
+        setStatus(`Preview ready. Crop: ${cropSummary(crop)}.`);
+      }, 160);
+    }
+
+    function cropChanged(rect, announce = true) {
+      state.crop.rect = rect;
+      renderCrop();
+      schedulePreview();
+      if (announce) announceCrop();
+    }
+
+    function drawCropHandles(context, rect) {
+      for (const [x, y] of Object.values(handlePoints(rect))) {
+        context.fillStyle = '#fffdf7';
+        context.fillRect(x - HANDLE_SIZE / 2, y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+        context.strokeStyle = '#151a18';
+        context.lineWidth = 2;
+        context.strokeRect(x - HANDLE_SIZE / 2, y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+      }
+    }
+
+    function renderCrop() {
+      const canvas = controls.cropCanvas;
+      const context = canvas.getContext('2d');
+      const scale = window.devicePixelRatio || 1;
+      const width = canvas.width / scale;
+      const height = canvas.height / scale;
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      context.clearRect(0, 0, width, height);
+      state.crop.displayRect = null;
+
+      if (!state.source.canvas) {
+        context.fillStyle = '#39413d';
+        context.font = '600 16px system-ui, sans-serif';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText('Choose an image to open the crop editor', width / 2, height / 2);
+        updateCropAria();
+        return;
+      }
+
+      const fit = Math.min(width / state.source.width, height / state.source.height);
+      const drawWidth = state.source.width * fit;
+      const drawHeight = state.source.height * fit;
+      const drawX = (width - drawWidth) / 2;
+      const drawY = (height - drawHeight) / 2;
+      state.crop.displayRect = { x: drawX, y: drawY, width: drawWidth, height: drawHeight };
+      context.drawImage(state.source.canvas, drawX, drawY, drawWidth, drawHeight);
+
+      if (!state.crop.rect) return;
+      const rect = cropDisplayRect();
+      context.fillStyle = 'rgb(15 22 20 / 62%)';
+      context.fillRect(drawX, drawY, drawWidth, rect.y - drawY);
+      context.fillRect(drawX, rect.y + rect.height, drawWidth, drawY + drawHeight - rect.y - rect.height);
+      context.fillRect(drawX, rect.y, rect.x - drawX, rect.height);
+      context.fillRect(rect.x + rect.width, rect.y, drawX + drawWidth - rect.x - rect.width, rect.height);
+      context.strokeStyle = '#fffdf7';
+      context.lineWidth = 4;
+      context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      context.strokeStyle = '#151a18';
+      context.lineWidth = 1.5;
+      context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      drawCropHandles(context, rect);
+      updateCropAria();
+    }
+
+    function resizeCropCanvas() {
+      const bounds = controls.cropCanvas.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.round(bounds.width * scale));
+      const height = Math.max(1, Math.round(bounds.height * scale));
+      if (controls.cropCanvas.width !== width || controls.cropCanvas.height !== height) {
+        controls.cropCanvas.width = width;
+        controls.cropCanvas.height = height;
+      }
+      renderCrop();
+    }
+
+    function cursorForHit(hit) {
+      if (!hit) return 'default';
+      if (hit.kind === 'move') return 'move';
+      return ({ n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', ne: 'nesw-resize', sw: 'nesw-resize', nw: 'nwse-resize', se: 'nwse-resize' })[hit.handle];
+    }
+
+    function bindCropEditor() {
+      controls.cropCanvas.addEventListener('pointerdown', (event) => {
+        if (!state.crop.rect || !state.crop.displayRect || !state.target.valid) return;
+        const point = canvasPoint(event);
+        const hit = hitTest(point);
+        if (!hit) return;
+        event.preventDefault();
+        controls.cropCanvas.focus();
+        controls.cropCanvas.setPointerCapture(event.pointerId);
+        state.crop.interaction = {
+          pointerId: event.pointerId,
+          kind: hit.kind,
+          handle: hit.handle,
+          start: normalizedPoint(point),
+          crop: state.crop.rect
+        };
+      });
+
+      controls.cropCanvas.addEventListener('pointermove', (event) => {
+        const interaction = state.crop.interaction;
+        if (!interaction || interaction.pointerId !== event.pointerId) {
+          controls.cropCanvas.style.cursor = state.target.valid && state.crop.rect && state.crop.displayRect
+            ? cursorForHit(hitTest(canvasPoint(event)))
+            : 'default';
+          return;
+        }
+        event.preventDefault();
+        const current = normalizedPoint(canvasPoint(event));
+        const dx = current.x - interaction.start.x;
+        const dy = current.y - interaction.start.y;
+        const next = interaction.kind === 'move'
+          ? ImageProcessing.moveCrop(interaction.crop, dx, dy)
+          : ImageProcessing.resizeCrop(interaction.crop, interaction.handle, dx, dy, cropAspect());
+        cropChanged(next);
+      });
+
+      function finishPointer(event) {
+        if (!state.crop.interaction || state.crop.interaction.pointerId !== event.pointerId) return;
+        state.crop.interaction = null;
+        if (controls.cropCanvas.hasPointerCapture(event.pointerId)) controls.cropCanvas.releasePointerCapture(event.pointerId);
+      }
+      controls.cropCanvas.addEventListener('pointerup', finishPointer);
+      controls.cropCanvas.addEventListener('pointercancel', finishPointer);
+
+      controls.cropCanvas.addEventListener('keydown', (event) => {
+        if (!state.target.valid || !state.crop.rect || !state.crop.displayRect) return;
+        const directions = {
+          ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]
+        };
+        const direction = directions[event.key];
+        const amount = event.shiftKey ? 10 : 1;
+        if (direction) {
+          event.preventDefault();
+          cropChanged(ImageProcessing.moveCrop(
+            state.crop.rect,
+            direction[0] * amount / state.crop.displayRect.width,
+            direction[1] * amount / state.crop.displayRect.height
+          ));
+          return;
+        }
+        const resizeDirection = ['+', '=', 'Add'].includes(event.key)
+          ? 1
+          : (['-', '_', 'Subtract'].includes(event.key) ? -1 : 0);
+        if (!resizeDirection) return;
+        event.preventDefault();
+        cropChanged(ImageProcessing.resizeCrop(
+          state.crop.rect,
+          'se',
+          resizeDirection * amount / state.crop.displayRect.width,
+          0,
+          cropAspect()
+        ));
+      });
+
+      controls.resetCrop.addEventListener('click', () => {
+        if (!state.source.canvas || !state.target.valid) return;
+        cropChanged(ImageProcessing.resetCrop(
+          state.source.width,
+          state.source.height,
+          state.target.width,
+          state.target.height
+        ));
+      });
+    }
+
+    function bindSettings() {
+      const bindings = [
+        ['brightness', 'brightness-value'],
+        ['contrast', 'contrast-value'],
+        ['sharpness', 'sharpness-value']
+      ];
+      controls.mode.addEventListener('change', () => {
+        state.settings.mode = controls.mode.value;
+        schedulePreview();
+      });
+      for (const [name, outputId] of bindings) {
+        controls[name].addEventListener('input', () => {
+          state.settings[name] = Number(controls[name].value);
+          $(outputId).value = controls[name].value;
+          schedulePreview();
+        });
+      }
+      controls.resetAdjustments.addEventListener('click', () => {
+        state.settings.brightness = 0;
+        state.settings.contrast = 0;
+        state.settings.sharpness = 20;
+        controls.brightness.value = '0';
+        controls.contrast.value = '0';
+        controls.sharpness.value = '20';
+        $('brightness-value').value = '0';
+        $('contrast-value').value = '0';
+        $('sharpness-value').value = '20';
+        setStatus('Adjustments reset.');
+        schedulePreview();
+      });
+    }
+
+    function canRender() {
+      return Boolean(state.source.canvas && state.target.valid && state.crop.rect);
+    }
+
+    function estimateWorkingBytes(sourceWidth, sourceHeight, outputWidth, outputHeight) {
+      return ImageProcessing.estimateRenderWorkingBytes(sourceWidth, sourceHeight, outputWidth, outputHeight);
+    }
+
+    function formatMebibytes(bytes) {
+      return Math.ceil(bytes / (1024 * 1024));
+    }
+
+    function assertWorkingMemory(sourceWidth, sourceHeight, outputWidth, outputHeight) {
+      const bytes = estimateWorkingBytes(sourceWidth, sourceHeight, outputWidth, outputHeight);
+      if (bytes > MAX_WORKING_BYTES) {
+        throw new RangeError(`The retained source image and this output need about ${formatMebibytes(bytes)} MiB of working memory. The 512 MiB safety limit prevents this render. Choose a smaller source or output.`);
+      }
+    }
+
+    function updateQualityWarning() {
+      const messages = [];
+      if (canRender()) {
+        const sourceCrop = ImageProcessing.cropToSource(
+          state.crop.rect,
+          state.source.width,
+          state.source.height
+        );
+        if (sourceCrop.sw < state.target.width || sourceCrop.sh < state.target.height) {
+          messages.push(`This crop contains about ${sourceCrop.sw} × ${sourceCrop.sh} source pixels. Exporting at ${state.target.width} × ${state.target.height} requires upscaling and cannot create missing detail.`);
+        }
+        const bytes = estimateWorkingBytes(state.source.width, state.source.height, state.target.width, state.target.height);
+        if (bytes > MAX_WORKING_BYTES) {
+          messages.push(`The retained source plus output processing need about ${formatMebibytes(bytes)} MiB. Export is blocked above the 512 MiB safety limit; choose a smaller source or output.`);
+        }
+      }
+      controls.warning.textContent = messages.join(' ');
+      controls.warning.hidden = messages.length === 0;
+    }
+
+    function previewDimensions() {
+      const scale = Math.min(
+        1,
+        MAX_PREVIEW_SIDE / state.target.width,
+        MAX_PREVIEW_SIDE / state.target.height
+      );
+      return {
+        width: Math.max(1, Math.round(state.target.width * scale)),
+        height: Math.max(1, Math.round(state.target.height * scale))
+      };
+    }
+
+    function captureRenderRequest() {
+      if (!canRender()) throw new Error('Choose an image and valid target dimensions before rendering.');
+      return {
+        sourceCanvas: state.source.canvas,
+        sourceWidth: state.source.width,
+        sourceHeight: state.source.height,
+        sourceName: state.source.name,
+        targetWidth: state.target.width,
+        targetHeight: state.target.height,
+        deviceName: state.target.deviceName,
+        crop: { ...state.crop.rect },
+        settings: { ...state.settings }
+      };
+    }
+
+    function renderPipeline(canvas, outputWidth, outputHeight, request = captureRenderRequest()) {
+      assertWorkingMemory(request.sourceWidth, request.sourceHeight, outputWidth, outputHeight);
+      const sourceCrop = ImageProcessing.cropToSource(
+        request.crop,
+        request.sourceWidth,
+        request.sourceHeight
+      );
+      canvas.width = outputWidth;
+      canvas.height = outputHeight;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) throw new Error('The browser could not allocate an output canvas.');
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(
+        request.sourceCanvas,
+        sourceCrop.sx,
+        sourceCrop.sy,
+        sourceCrop.sw,
+        sourceCrop.sh,
+        0,
+        0,
+        outputWidth,
+        outputHeight
+      );
+      const imageData = context.getImageData(0, 0, outputWidth, outputHeight);
+      imageData.data.set(ImageProcessing.processPixels(
+        imageData.data,
+        outputWidth,
+        outputHeight,
+        request.settings
+      ));
+      context.putImageData(imageData, 0, 0);
+      return canvas;
+    }
+
+    function schedulePreview() {
+      const token = ++activeRenderToken;
+      clearTimeout(previewTimer);
+      updateQualityWarning();
+      updateCropAvailability();
+      if (!canRender()) return;
+      previewTimer = setTimeout(() => {
+        if (token !== activeRenderToken) return;
+        const dimensions = previewDimensions();
+        try {
+          renderPipeline(controls.previewCanvas, dimensions.width, dimensions.height);
+          if (token !== activeRenderToken) return;
+          setStatus(`Preview ready at ${dimensions.width} × ${dimensions.height} pixels. Export will be ${state.target.width} × ${state.target.height}.`);
+        } catch (error) {
+          if (token !== activeRenderToken) return;
+          showError(error instanceof Error ? error.message : 'The preview could not be rendered.');
+          setStatus('Preview stopped. Adjust the image or target and try again.');
+        }
+      }, PREVIEW_DEBOUNCE_MS);
+    }
+
+    function canvasToPng(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('The browser could not encode the PNG.'));
+        }, 'image/png');
+      });
+    }
+
+    async function downloadPng() {
+      if (!canRender() || exporting) return;
+      const request = captureRenderRequest();
+      exporting = true;
+      updateCropAvailability();
+      clearError();
+      setStatus(`Rendering ${request.targetWidth} × ${request.targetHeight} PNG…`);
+      try {
+        assertWorkingMemory(request.sourceWidth, request.sourceHeight, request.targetWidth, request.targetHeight);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const outputCanvas = document.createElement('canvas');
+        renderPipeline(outputCanvas, request.targetWidth, request.targetHeight, request);
+        setStatus('Encoding PNG…');
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const blob = await canvasToPng(outputCanvas);
+        const filename = ImageProcessing.buildFilename(
+          request.sourceName,
+          request.deviceName,
+          request.targetWidth,
+          request.targetHeight
+        );
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          const anchor = document.createElement('a');
+          anchor.href = objectUrl;
+          anchor.download = filename;
+          document.body.append(anchor);
+          anchor.click();
+          anchor.remove();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+        setStatus(`Downloaded ${filename}.`);
+      } catch (error) {
+        showError(error instanceof Error ? error.message : 'The PNG could not be created.');
+        setStatus('Export stopped. Adjust the image or target and try again.');
+      } finally {
+        exporting = false;
+        updateCropAvailability();
+      }
+    }
+
+    function renderPreviewShell() {
+      const context = controls.previewCanvas.getContext('2d');
+      context.fillStyle = '#eee9dd';
+      context.fillRect(0, 0, controls.previewCanvas.width, controls.previewCanvas.height);
+      context.fillStyle = '#59645f';
+      context.font = '600 16px system-ui, sans-serif';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText('Preview appears after processing', controls.previewCanvas.width / 2, controls.previewCanvas.height / 2);
+    }
+
+    function bindSourceDropZone() {
+      for (const type of ['dragenter', 'dragover']) {
+        controls.sourceDropZone.addEventListener(type, (event) => {
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+          controls.sourceDropZone.classList.add('is-dragging');
+        });
+      }
+      controls.sourceDropZone.addEventListener('dragleave', (event) => {
+        if (!event.relatedTarget || !controls.sourceDropZone.contains(event.relatedTarget)) {
+          controls.sourceDropZone.classList.remove('is-dragging');
+        }
+      });
+      controls.sourceDropZone.addEventListener('drop', (event) => {
+        event.preventDefault();
+        controls.sourceDropZone.classList.remove('is-dragging');
+        const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+        if (file) handleFile(file);
+        else {
+          showError('Drop one JPEG, PNG, or WebP image file.');
+          setStatus(state.source.canvas ? `Keeping ${state.source.name}.` : 'Choose a supported image to begin.');
+        }
+      });
+    }
+
+    populateModels();
+    const initialPreset = ImageProcessing.PRESETS[0];
+    populateDevices(initialPreset.brand, initialPreset.id);
+    selectPreset(initialPreset.id);
+    bindTargetControls();
+    bindCropEditor();
+    bindSettings();
+    bindSourceDropZone();
+    controls.file.addEventListener('change', () => {
+      if (controls.file.files && controls.file.files[0]) {
+        handleFile(controls.file.files[0]);
+      } else {
+        activeDecodeId += 1;
+        setStatus(state.source.canvas ? `Keeping ${state.source.name}.` : 'Choose a supported image to begin.');
+      }
+    });
+    controls.download.addEventListener('click', downloadPng);
+    if (typeof ResizeObserver === 'function') new ResizeObserver(resizeCropCanvas).observe(controls.cropCanvas);
+    else window.addEventListener('resize', resizeCropCanvas);
+    resizeCropCanvas();
+    renderPreviewShell();
+  })();
+  </script>
+</body>
+</html>

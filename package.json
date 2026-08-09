@@ -1,0 +1,15 @@
+{
+  "name": "eink-image-generator",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test:unit": "node --test test/image-processing.test.js test/repository-hygiene.test.js test/standalone-sync.test.js",
+    "test:smoke": "node --test test/browser-smoke.test.js test/landing-page.test.js",
+    "test": "npm run test:unit && npm run test:smoke"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}
