@@ -115,6 +115,34 @@ test('PNG dimension parser validates the signature and IHDR framing', () => {
   assert.throws(() => readPngDimensions(badType), /IHDR/);
 });
 
+test('screen selection uses brand and device without a duplicate model search', async (t) => {
+  const { page, pageErrors, requestUrls, webSocketUrls } = await openApp(t);
+
+  assert.equal(await page.locator('#device-search').count(), 0);
+  assert.equal(await page.locator('#device-options').count(), 0);
+
+  await page.locator('#brand-select').selectOption({ label: 'Kobo' });
+  const actualPresetIds = await page.locator('#device-select option').evaluateAll((options) =>
+    options.map((entry) => entry.value)
+  );
+  const expectedPresetIds = await page.evaluate(() => [
+    ...ImageProcessing.getPresetsForBrand('Kobo').map((preset) => preset.id),
+    '__custom__'
+  ]);
+  assert.deepEqual(actualPresetIds, expectedPresetIds);
+
+  await page.locator('#device-select').selectOption('kobo-libra-family');
+  assert.match(await page.locator('#target-dimensions').textContent(), /^1264 × 1680 pixels \(portrait\)$/);
+
+  await page.locator('#device-select').selectOption('__custom__');
+  assert.equal(await page.locator('#custom-width').isEnabled(), true);
+  assert.equal(await page.locator('#custom-height').isEnabled(), true);
+
+  assert.deepEqual(pageErrors, []);
+  assert.deepEqual(requestUrls, []);
+  assert.deepEqual(webSocketUrls, []);
+});
+
 test('file app previews locally and exports the exact active target as PNG', { timeout: 30_000 }, async (t) => {
   const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), 'ereader-converter-smoke-'));
   t.after(() => rm(fixtureDirectory, { recursive: true, force: true }));

@@ -203,11 +203,6 @@
         <select id="brand-select"></select>
       </div>
       <div>
-        <label for="device-search">Find a model</label>
-        <input id="device-search" type="search" list="device-options" autocomplete="off" placeholder="Type a model name">
-        <datalist id="device-options"></datalist>
-      </div>
-      <div>
         <label for="device-select">Device</label>
         <select id="device-select"></select>
       </div>
@@ -377,11 +372,6 @@
   function getBrands() { return [...new Set(PRESETS.map((preset) => preset.brand))]; }
   function getPresetsForBrand(brand) { return PRESETS.filter((preset) => preset.brand === brand); }
   function findPreset(id) { return PRESETS.find((preset) => preset.id === id) || null; }
-  function findPresetBySearchName(name) {
-    const normalized = typeof name === 'string' ? name.trim().toLowerCase() : '';
-    return PRESETS.find((preset) => preset.searchNames.some((candidate) => candidate.toLowerCase() === normalized)) || null;
-  }
-
   function parseDimension(value, name) {
     const text = typeof value === 'number' && Number.isInteger(value) ? String(value) : (typeof value === 'string' ? value : '');
     if (!/^\d+$/.test(text)) return { valid: false, message: `${name} must be a whole number between 1 and 10000` };
@@ -657,7 +647,7 @@
     return floydSteinbergDither(sharpened, width, height);
   }
 
-  return Object.freeze({ PRESETS, getBrands, getPresetsForBrand, findPreset, findPresetBySearchName, validateDimensions, validateImageFile, buildFilename, estimateSourceNormalizationBytes, estimateRenderWorkingBytes, resetCrop, moveCrop, resizeCrop, changeCropAspect, cropToSource, flattenTransparency, toPerceptualGrayscale, adjustBrightnessContrast, unsharpMask, floydSteinbergDither, processPixels });
+  return Object.freeze({ PRESETS, getBrands, getPresetsForBrand, findPreset, validateDimensions, validateImageFile, buildFilename, estimateSourceNormalizationBytes, estimateRenderWorkingBytes, resetCrop, moveCrop, resizeCrop, changeCropAspect, cropToSource, flattenTransparency, toPerceptualGrayscale, adjustBrightnessContrast, unsharpMask, floydSteinbergDither, processPixels });
 });
 /* IMAGE_PROCESSING_END */
   </script>
@@ -671,8 +661,6 @@
       sourceDropZone: $('source-drop-zone'),
       brand: $('brand-select'),
       device: $('device-select'),
-      deviceSearch: $('device-search'),
-      deviceOptions: $('device-options'),
       customWidth: $('custom-width'),
       customHeight: $('custom-height'),
       rotate: $('rotate-dimensions'),
@@ -736,12 +724,6 @@
       }
       controls.brand.append(option(CUSTOM, 'Custom'));
 
-      for (const preset of ImageProcessing.PRESETS) {
-        for (const name of preset.searchNames) {
-          const entry = option(name, `${name} — ${preset.width} × ${preset.height}`);
-          controls.deviceOptions.append(entry);
-        }
-      }
     }
 
     function populateDevices(brand, selectedId) {
@@ -808,7 +790,6 @@
       state.target.rotated = false;
       controls.brand.value = preset.brand;
       populateDevices(preset.brand, preset.id);
-      controls.deviceSearch.value = preset.searchNames[0];
       controls.customWidth.value = String(preset.width);
       controls.customHeight.value = String(preset.height);
       controls.customWidth.disabled = true;
@@ -822,7 +803,6 @@
     function enterCustomMode() {
       controls.brand.value = CUSTOM;
       populateDevices(CUSTOM, CUSTOM);
-      controls.deviceSearch.value = '';
       controls.customWidth.disabled = false;
       controls.customHeight.disabled = false;
       state.target.presetId = CUSTOM;
@@ -867,11 +847,6 @@
       controls.device.addEventListener('change', () => {
         if (controls.device.value === CUSTOM) enterCustomMode();
         else selectPreset(controls.device.value);
-      });
-
-      controls.deviceSearch.addEventListener('input', () => {
-        const preset = ImageProcessing.findPresetBySearchName(controls.deviceSearch.value);
-        if (preset) selectPreset(preset.id);
       });
 
       controls.customWidth.addEventListener('input', validateCustomDimensions);

@@ -100,11 +100,6 @@
   function getBrands() { return [...new Set(PRESETS.map((preset) => preset.brand))]; }
   function getPresetsForBrand(brand) { return PRESETS.filter((preset) => preset.brand === brand); }
   function findPreset(id) { return PRESETS.find((preset) => preset.id === id) || null; }
-  function findPresetBySearchName(name) {
-    const normalized = typeof name === 'string' ? name.trim().toLowerCase() : '';
-    return PRESETS.find((preset) => preset.searchNames.some((candidate) => candidate.toLowerCase() === normalized)) || null;
-  }
-
   function parseDimension(value, name) {
     const text = typeof value === 'number' && Number.isInteger(value) ? String(value) : (typeof value === 'string' ? value : '');
     if (!/^\d+$/.test(text)) return { valid: false, message: `${name} must be a whole number between 1 and 10000` };
@@ -380,5 +375,5 @@
     return floydSteinbergDither(sharpened, width, height);
   }
 
-  return Object.freeze({ PRESETS, getBrands, getPresetsForBrand, findPreset, findPresetBySearchName, validateDimensions, validateImageFile, buildFilename, estimateSourceNormalizationBytes, estimateRenderWorkingBytes, resetCrop, moveCrop, resizeCrop, changeCropAspect, cropToSource, flattenTransparency, toPerceptualGrayscale, adjustBrightnessContrast, unsharpMask, floydSteinbergDither, processPixels });
+  return Object.freeze({ PRESETS, getBrands, getPresetsForBrand, findPreset, validateDimensions, validateImageFile, buildFilename, estimateSourceNormalizationBytes, estimateRenderWorkingBytes, resetCrop, moveCrop, resizeCrop, changeCropAspect, cropToSource, flattenTransparency, toPerceptualGrayscale, adjustBrightnessContrast, unsharpMask, floydSteinbergDither, processPixels });
 });
